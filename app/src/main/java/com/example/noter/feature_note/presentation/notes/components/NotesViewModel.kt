@@ -18,61 +18,79 @@ import javax.inject.Inject
 @HiltViewModel
 class NotesViewModel @Inject constructor(
     private val noteUseCase: NoteUseCase
-): ViewModel(){
-
+) : ViewModel() {
 
     private val _state = mutableStateOf(NotesState())
-    val state : State<NotesState> = _state
+    val state: State<NotesState> = _state
+
+    /** Sorted notes as delivered by the use case, before search/filter. */
+    private var sortedNotes: List<Note> = emptyList()
 
     private var recentlyDeletedNote: Note? = null
-
     private var getNotesJob: Job? = null
 
-    init{
+    init {
         getNotes(NoteOrder.Date(OrderType.Descending))
     }
 
-    fun onEvent(event: NotesEvent){
-        when(event){
-            is NotesEvent.Order ->{
-                if(state.value.noteOrder::class == event.noteOrder::class  &&
-                    state.value.noteOrder.orderType == event.noteOrder.orderType){
-                    return
-                }
-
+    fun onEvent(event: NotesEvent) {
+        when (event) {
+            is NotesEvent.Order -> {
+                if (state.value.noteOrder::class == event.noteOrder::class &&
+                    state.value.noteOrder.orderType == event.noteOrder.orderType
+                ) return
                 getNotes(event.noteOrder)
             }
-            is NotesEvent.DeleteNote ->{
+            is NotesEvent.DeleteNote -> {
                 viewModelScope.launch {
                     noteUseCase.deleteNote(event.note)
                     recentlyDeletedNote = event.note
                 }
             }
-            is NotesEvent.RestoreNote ->{
+            is NotesEvent.RestoreNote -> {
                 viewModelScope.launch {
-                    noteUseCase.addNote(recentlyDeletedNote?: return@launch)
+                    noteUseCase.addNote(recentlyDeletedNote ?: return@launch)
                     recentlyDeletedNote = null
                 }
             }
-            is NotesEvent.ToggleOrderSection ->{
+            is NotesEvent.ToggleOrderSection -> {
                 _state.value = state.value.copy(
                     isOrderSectionVisible = !state.value.isOrderSectionVisible
                 )
+            }
+            is NotesEvent.Search -> {
+                _state.value = state.value.copy(searchQuery = event.query)
+                publish()
+            }
+            is NotesEvent.FilterColor -> {
+                _state.value = state.value.copy(
+                    colorFilter = if (state.value.colorFilter == event.color) null else event.color
+                )
+                publish()
             }
         }
     }
 
     private fun getNotes(noteOrder: NoteOrder) {
-
         getNotesJob?.cancel()
         getNotesJob = noteUseCase.getNotes(noteOrder)
             .onEach { notes ->
-                _state.value = state.value.copy(
-                    notes = notes,
-                    noteOrder = noteOrder
-                )
+                sortedNotes = notes
+                _state.value = state.value.copy(noteOrder = noteOrder, isLoaded = true)
+                publish()
             }
             .launchIn(viewModelScope)
     }
 
+    private fun publish() {
+        val query = state.value.searchQuery.trim()
+        val color = state.value.colorFilter
+        val visible = sortedNotes.filter { note ->
+            (color == null || note.color == color) &&
+                (query.isEmpty() ||
+                    note.title.contains(query, ignoreCase = true) ||
+                    note.content.contains(query, ignoreCase = true))
+        }
+        _state.value = state.value.copy(notes = visible, totalCount = sortedNotes.size)
+    }
 }
