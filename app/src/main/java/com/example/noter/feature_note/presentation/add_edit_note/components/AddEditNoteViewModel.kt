@@ -22,11 +22,13 @@ class AddEditNoteViewModel @Inject constructor(
 ): ViewModel() {
 
     private val _noteTitle = mutableStateOf(NoteTextFieldState(
-        hint = "Enter title"
+        hint = "Title"
     ))
     val noteTitle: State<NoteTextFieldState> = _noteTitle
 
-    private val _noteContent = mutableStateOf(NoteTextFieldState())
+    private val _noteContent = mutableStateOf(NoteTextFieldState(
+        hint = "Start writing…"
+    ))
     val noteContent: State<NoteTextFieldState> = _noteContent
 
     private val _noteColor = mutableStateOf(Note.noteColors.random().toArgb())
@@ -36,7 +38,12 @@ class AddEditNoteViewModel @Inject constructor(
     val eventFlow = _eventFlow.asSharedFlow()
 
 
+    private val _noteTimestamp = mutableStateOf<Long?>(null)
+    /** Last-edited time of an existing note, null for a new note. */
+    val noteTimestamp: State<Long?> = _noteTimestamp
+
     private var currentNoteId: Int? = null
+    private var loadedNote: Note? = null
 
     init{
         savedStateHandle.get<Int>("noteId")?.let{ noteId ->
@@ -44,6 +51,8 @@ class AddEditNoteViewModel @Inject constructor(
                 viewModelScope.launch {
                     noteUseCase.getNote(noteId)?.also {note->
                         currentNoteId = note.id
+                        loadedNote = note
+                        _noteTimestamp.value = note.timestamp
                         _noteTitle.value = noteTitle.value.copy(
                             text = note.title,
                             isHintVisible = false
@@ -89,6 +98,13 @@ class AddEditNoteViewModel @Inject constructor(
             }
             is AddEditNoteEvent.ChangeColor -> {
                 _noteColor.value = event.color
+            }
+
+            is AddEditNoteEvent.DeleteNote -> {
+                viewModelScope.launch {
+                    loadedNote?.let { noteUseCase.deleteNote(it) }
+                    _eventFlow.emit(UiEvent.SaveNote)
+                }
             }
 
             is AddEditNoteEvent.SaveNote -> {

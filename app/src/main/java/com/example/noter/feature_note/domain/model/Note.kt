@@ -3,11 +3,7 @@ package com.example.noter.feature_note.domain.model
 import androidx.compose.ui.graphics.Color
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.example.noter.ui.theme.BabyBlue
-import com.example.noter.ui.theme.LightGreen
-import com.example.noter.ui.theme.RedOrange
-import com.example.noter.ui.theme.RedPink
-import com.example.noter.ui.theme.Violet
+import com.example.noter.ui.theme.NoteTones
 
 
 @Entity
@@ -20,7 +16,7 @@ data class Note(
 
 ){
     companion object{
-        val noteColors = listOf(RedOrange, LightGreen, Violet, BabyBlue, RedPink)
+        val noteColors = NoteTones.all.map { it.light }
     }
 }
 
